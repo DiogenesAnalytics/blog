@@ -67,8 +67,8 @@ def list_file_sizes(
             yield (file.name, convert_size(file.stat().st_size, units))
 
 
-def print_file_sizes(directory: str, unit: str = 'KB') -> None:
+def print_file_sizes(directory: str, unit: str = "KB") -> None:
     """Prints the sizes of all files directory."""
     # call list_file_sizes and print the results
     for filename, size in list_file_sizes(directory, unit):
-        print(f'{filename}: {size:.2f} {unit}')
+        print(f"{filename}: {size:.2f} {unit}")
