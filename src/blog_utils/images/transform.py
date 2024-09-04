@@ -1,74 +1,89 @@
 """Transform images (e.g. resize, crop, etc)."""
 
 import io
-import os
+import warnings
+from typing import Any
+from typing import Generator
 from typing import Tuple
 
 from PIL import Image
 
+from .io import open_image_file
+from .io import open_images_in_directory
+
 
 def shrink_image_to_size(
-    input_path: str,
-    output_path: str,
+    img: Image.Image,
     target_size_kb: int,
-    step: int = 5,
+    initial_quality: int = 95,
     min_quality: int = 10,
-) -> None:
-    """Shrinks the image to approximately the target size by adjusting its quality."""
-    # open image using PIL
-    img: Image.Image = Image.open(input_path)
-
+    reduction_factor: float = 0.9,
+    quality_step: int = 5,
+    resize_step_factor: float = 0.95,
+) -> Image.Image:
+    """Shrinks the image to approximate target size."""
     # convert the image to RGB mode if it's not already
     if img.mode != "RGB":
         img = img.convert("RGB")
 
-    # start with a high quality setting
-    quality: int = 95
+    # initialize img_resized with the original image
+    img_resized = img
 
-    # begin size reduction
-    while quality >= min_quality:
-        # use a BytesIO object to save the image in memory
+    # begin size reduction loop
+    while initial_quality >= min_quality:
+        # resize the image based on the reduction factor
+        width, height = img.size
+        img_resized = img.resize(
+            (int(width * reduction_factor), int(height * reduction_factor)),
+            Image.LANCZOS,
+        )
+
+        # use a context manager to handle the BytesIO object
         with io.BytesIO() as output_stream:
             # save to memory buffer
-            img.save(output_stream, "JPEG", quality=quality)
+            img_resized.save(output_stream, "JPEG", quality=initial_quality)
 
-            # get image size
+            # check image size (in kilobytes)
             file_size_kb: float = len(output_stream.getvalue()) / 1024
 
             # break the loop if the file size is within the desired range
             if file_size_kb <= target_size_kb:
-                # save the final image to disk
-                with open(output_path, "wb") as final_output_file:
-                    final_output_file.write(output_stream.getvalue())
-                return  # exit function once the desired size is achieved
+                return img_resized
 
-        # reduce the quality for the next iteration
-        quality -= step
+        # if not, reduce quality and try again
+        initial_quality -= quality_step
+        reduction_factor *= resize_step_factor
 
-    # if the loop exits without achieving the desired size
-    print(
-        "Warning: Unable to reduce image below target size "
-        "without significant quality loss."
+    # issue a warning if the target size could not be met
+    warnings.warn(
+        "Unable to reduce image below target size without significant quality loss.",
+        UserWarning,
+        stacklevel=2,
     )
+
+    # return the last attempted image if the loop ends without meeting the target size
+    return img_resized
+
+
+def shrink_image_at_filepath(
+    input_path: str, target_size_kb: int, **kwargs: Any
+) -> Image.Image:
+    """Shrinks the image at the given file path."""
+    # open the image from the file path
+    img: Image.Image = open_image_file(input_path)
+
+    # shrink the image
+    return shrink_image_to_size(img, target_size_kb, **kwargs)
 
 
 def shrink_images_in_directory(
-    directory: str, target_size_kb: int, output_dir: str = "resized_images"
-) -> None:
-    """Shrinks all images in a directory to the target size by adjusting the quality."""
-    # ensure the output directory exists
-    os.makedirs(output_dir, exist_ok=True)
-
-    # loop over files in dir
-    for filename in os.listdir(directory):
-        # make sure file is an image
-        if filename.lower().endswith((".jpg", ".jpeg", ".png")):
-            # create paths for input/output file
-            input_path: str = os.path.join(directory, filename)
-            output_path: str = os.path.join(output_dir, filename)
-
-            # now shrink
-            shrink_image_to_size(input_path, output_path, target_size_kb)
+    directory: str, target_size_kb: int, **kwargs: Any
+) -> Generator[Image.Image, None, None]:
+    """Yields resized images from a directory."""
+    # Use the image_io module to open images from the directory
+    for img in open_images_in_directory(directory):
+        # Shrink image and yield the resized image
+        yield shrink_image_to_size(img, target_size_kb, **kwargs)
 
 
 def crop_to_target(image: Image.Image, target_size: Tuple[int, int]) -> Image.Image:

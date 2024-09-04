@@ -2,6 +2,7 @@
 
 import base64
 from io import BytesIO
+from typing import Iterable
 from typing import List
 from typing import Tuple
 
@@ -13,7 +14,7 @@ from .transform import crop_to_target
 
 
 def display_images_in_grid(
-    images: List[Image.Image],  # list of PIL Image objects
+    images: List[Image.Image],  # Iterable of PIL Image objects
     titles: List[str],
     target_size: Tuple[int, int],
     rows: int,
@@ -83,7 +84,7 @@ def display_images_in_grid(
 
 
 def display_base64_images_grid(
-    encoded_images: List[str],
+    encoded_images: Iterable[str],
     titles: List[str],
     target_size: Tuple[int, int],
     rows: int,
